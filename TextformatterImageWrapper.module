@@ -1,0 +1,72 @@
+<?php
+/*
+ * Image Wrapper
+ * By Matthew Simpson (http://matthewsimpson.net)
+ * Copyright 2014 NB Communication (http://www.nbcommunication.com)
+ */
+
+class TextformatterImageWrapper extends Textformatter implements Module {
+	public $templateString;
+
+	public static function getModuleInfo() {
+		return array(
+			'title'=>'Image Wrapper',
+			'summary'=>'Parses through a given field and applies a template to any found image tags.',
+			'author'=>'Matthew Simpson',
+			'autoload'=>false,
+			'version'=>101,
+			'icon'=>'image'
+		);
+	}
+
+	public function format(&$str) {
+		$this->parseField($str);
+	}
+
+	protected function parseField(&$str,$templateDir) {
+		//Load the template file into a string
+		//$template = ($template) ? $template : 'default.tpl';
+		$templateFile = wire('config')->paths->templates.'tpl/default.tpl';
+		$templateFile = file_exists($templateFile) ? $templateFile : 'default.tpl'; 
+		$this->templateString = file_get_contents(wire('config')->paths->templates.'tpl/default.tpl');
+
+		//Search the given field for an image field in an anchor field, then run a function on each result
+		$str = preg_replace_callback('/<a.*?><img.*?\/><\/a>/',"self::xmlAttributes",$str);
+	}
+
+	protected function xmlAttributes($matches) {
+		//Initialise the array and load the result into a simple XML DOM
+		$images = array();
+		$xml = simplexml_load_string($matches[0]);
+
+		//Get all the anchor attributes and add them to the $image array
+		foreach($xml->attributes() as $key=>$field) {
+			$image['a:'.$key] = (string)$field;
+		}
+		//Get all the image attributes and add them to the $image array
+		foreach($xml->img[0]->attributes() as $key=>$field) {
+			$image['img:'.$key] = (string)$field;
+		}
+
+		//Get the width and height of the thumbnail image and add them to the $image array
+		$thumb = getimagesize(wire('config')->paths->root.$image['img:src']);
+		$image['thumb:width'] = $thumb[0];
+		$image['thumb:height'] = $thumb[1];
+
+		//Get the width and height of the source image and add them to the $image array
+		$src = getimagesize(wire('config')->paths->root.$image['a:href']);
+		$image['source:width'] = $src[0];
+		$image['source:height'] = $src[1];
+
+		//Loop through the attributes in the $image array and replace them in the template
+		$output = $this->templateString;
+		foreach($image as $key=>$value) {
+			$output = str_replace('[+'.$key.'+]',$value,$output);
+		}
+
+		//Return the replaced template to the final output
+		return $output;
+	}
+
+}
+?>
